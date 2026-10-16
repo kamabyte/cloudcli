@@ -1,0 +1,58 @@
+# cloudcli — стек Dokploy (тип Compose, источник Raw или Git: этот файл).
+# Веб-интерфейс Claude Code на http://code.home.internal.
+#
+# Это браузерный терминал с ИИ-агентом: всё, что лежит в смонтированных
+# каталогах, он может прочитать, изменить и отправить в сеть. Поэтому:
+#   - домен — метками ниже, с nas-admin-only@file с первого деплоя;
+#     вкладку Domains у стека оставлять пустой;
+#   - ports: нет — иначе порт открыт всем, кто достаёт до сервера;
+#   - никаких docker.sock, /, /etc, медиадиска. Нужен репозиторий —
+#     git clone в /workspace, а не bind mount живых путей сервера.
+#
+# Каталоги на хосте создать до первого деплоя (владелец 1000:1000 = lenar):
+#   sudo install -d -o 1000 -g 1000 -m 700 /srv/cloudcli /srv/cloudcli/home /srv/cloudcli/workspace
+
+services:
+  cloudcli:
+    image: ghcr.io/kamabyte/cloudcli:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Moscow
+    volumes:
+      # ~/.claude (вход в Claude, сессии, настройки, MCP), ~/.cloudcli
+      # (пароль интерфейса, база), ~/.gitconfig, ~/.ssh.
+      - type: bind
+        source: /srv/cloudcli/home
+        target: /home/node
+        bind: { create_host_path: false }
+      # Проекты. CloudCLI не выходит за WORKSPACES_ROOT=/workspace.
+      - type: bind
+        source: /srv/cloudcli/workspace
+        target: /workspace
+        bind: { create_host_path: false }
+    networks:
+      default: { gw_priority: 1 }
+      dokploy-network: {}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        # Claude Code плюс то, что он запустит (npm install, тесты). Jellyfin важнее.
+        limits: { cpus: "2", memory: 3g }
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.cloudcli-web.rule=Host(`code.home.internal`)
+      - traefik.http.routers.cloudcli-web.entrypoints=web
+      - traefik.http.routers.cloudcli-web.middlewares=nas-admin-only@file
+      - traefik.http.routers.cloudcli-web.service=cloudcli-web
+      - traefik.http.services.cloudcli-web.loadbalancer.server.port=3001
+
+networks:
+  dokploy-network:
+    external: true
