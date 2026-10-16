@@ -45,21 +45,26 @@
 
        sudo install -d -o 1000 -g 1000 -m 700 /srv/cloudcli /srv/cloudcli/home /srv/cloudcli/workspace
 
-3. **Dokploy** → проект `cloudcli` → Create Service → Compose, источник Raw
-   (вставить `compose.yml`) или Git (этот репозиторий). Вкладку Domains
-   не заполнять — домен в метках. Deploy.
-4. **Первый вход:** http://code.home.internal → задать пароль.
+3. **Dokploy:** проект `cloudcli`, окружение `production`, стек Compose
+   `cloudcli` (appName `cloudcli`). Источник — Git: публичный
+   `https://github.com/kamabyte/cloudcli.git`, ветка `main`, файл `./compose.yml`;
+   доступ к GitHub не нужен. Вкладку Domains не заполнять — домен в метках.
+   Deploy.
+4. **Первый вход:** http://code.home.internal → сразу задать пароль: до этого
+   учётную запись может занять любой, кто открыл страницу из дома или roam.
+   Мастер первого входа спросит имя и почту для git (`git config --global`):
+   `kamabyte` и `13827900+kamabyte@users.noreply.github.com`.
 5. **Вход в Claude:** вкладка Shell →
 
        claude            # затем /login: открыть ссылку на Маке, вставить код обратно
 
    Учётные данные ложатся в `/srv/cloudcli/home/.claude` и переживают пересборку.
-6. **Git:**
+6. **Ключ для push:** во вкладке Shell
 
-       git config --global user.name kamabyte
-       git config --global user.email 13827900+kamabyte@users.noreply.github.com
-       ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519   # публичный ключ — в deploy keys репозитория
+       ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519 && cat ~/.ssh/id_ed25519.pub
 
+   Публичный ключ — в Deploy keys (с правом записи) тех репозиториев, куда
+   нужен push, а не в SSH-ключи аккаунта.
 7. **homelab:** строка `code` в `services.toml`, плитка на главной, `portal/deploy.sh`.
 
 ## Проверка
@@ -70,6 +75,8 @@
 ## Новая версия
 
 Поднять `CLOUDCLI_VERSION` и/или `CLAUDE_CODE_VERSION` в `Dockerfile`, push в
-`main`, в Dokploy — Redeploy. Кнопка обновления в самом интерфейсе не
+`main`, дождаться сборки в Actions, в Dokploy — Redeploy: он заберёт из git
+свежий `compose.yml` и скачает образ (`pull_policy: always`). Правка только
+`compose.yml` — тоже push и Redeploy. Кнопка обновления в самом интерфейсе не
 сработает: `/usr/local` в образе принадлежит root. Откат — `IMAGE_TAG=sha-<коммит>`
 во вкладке Environment и Redeploy.
